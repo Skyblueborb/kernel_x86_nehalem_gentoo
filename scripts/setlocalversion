@@ -72,11 +72,9 @@ scm_version()
 	# If we are at the tagged commit, we ignore it because the version is
 	# well-defined.
 	if [ -z "$(git describe --exact-match --match=$tag 2>/dev/null)" ]; then
-
 		# If only the short version is requested, don't bother
 		# running further git commands
 		if $short; then
-			echo "+"
 			return
 		fi
 		# If we are past the tagged commit, we pretty print it.
