@@ -1659,6 +1659,33 @@ static int drm_mode_parse_panel_orientation(const char *delim,
 	return 0;
 }
 
+static int drm_mode_parse_pixel_encoding(const char *delim,
+					 struct drm_cmdline_mode *mode)
+{
+	const char *value;
+
+	if (*delim != '=')
+		return -EINVAL;
+
+	value = delim + 1;
+	delim = strchr(value, ',');
+	if (!delim)
+		delim = value + strlen(value);
+
+	if (!strncmp(value, "auto", delim - value))
+		mode->pixel_encoding = 0;
+	else if (!strncmp(value, "rgb", delim - value))
+		mode->pixel_encoding = DRM_COLOR_FORMAT_RGB444;
+	else if (!strncmp(value, "ycbcr444", delim - value))
+		mode->pixel_encoding = DRM_COLOR_FORMAT_YCBCR444;
+	else if (!strncmp(value, "ycbcr420", delim - value))
+		mode->pixel_encoding = DRM_COLOR_FORMAT_YCBCR420;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
 static int drm_mode_parse_cmdline_options(const char *str,
 					  bool freestanding,
 					  const struct drm_connector *connector,
@@ -1727,6 +1754,9 @@ static int drm_mode_parse_cmdline_options(const char *str,
 			mode->tv_margins.bottom = margin;
 		} else if (!strncmp(option, "panel_orientation", delim - option)) {
 			if (drm_mode_parse_panel_orientation(delim, mode))
+				return -EINVAL;
+		} else if (!strncmp(option, "pixel_encoding", delim - option)) {
+			if (drm_mode_parse_pixel_encoding(delim, mode))
 				return -EINVAL;
 		} else {
 			return -EINVAL;

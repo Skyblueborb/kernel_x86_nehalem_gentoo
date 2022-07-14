@@ -127,6 +127,7 @@ union stream_update_flags {
 		uint32_t dsc_changed : 1;
 		uint32_t mst_bw : 1;
 		uint32_t crtc_timing_adjust : 1;
+		uint32_t pixel_encoding:1;
 	} bits;
 
 	uint32_t raw;
@@ -303,6 +304,7 @@ struct dc_stream_update {
 	struct dc_mst_stream_bw_update *mst_bw_update;
 	struct dc_transfer_func *func_shaper;
 	struct dc_3dlut *lut3d_func;
+	struct dc_crtc_timing *timing_for_pixel_encoding;
 
 	struct test_pattern *pending_test_pattern;
 	struct dc_crtc_timing_adjust *crtc_timing_adjust;
