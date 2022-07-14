@@ -5250,6 +5250,115 @@ static bool adjust_colour_depth_from_display_info(
 	return false;
 }
 
+/* convert an pixel encoding property value to a dc_pixel_encoding */
+static bool drm_prop_to_dc_pixel_encoding(
+	enum dc_pixel_encoding *dc_pixenc,
+	unsigned int propval)
+{
+	bool ret = false;
+
+	switch (propval) {
+	case 0:
+		*dc_pixenc = PIXEL_ENCODING_UNDEFINED;
+		ret = true;
+		break;
+	case DRM_COLOR_FORMAT_RGB444:
+		*dc_pixenc = PIXEL_ENCODING_RGB;
+		ret = true;
+		break;
+	case DRM_COLOR_FORMAT_YCBCR444:
+		*dc_pixenc = PIXEL_ENCODING_YCBCR444;
+		ret = true;
+		break;
+	case DRM_COLOR_FORMAT_YCBCR420:
+		*dc_pixenc = PIXEL_ENCODING_YCBCR420;
+		ret = true;
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
+/* convert an dc_pixel_encoding to a pixel encoding property value */
+static unsigned int dc_pixel_encoding_to_drm_prop(
+	enum dc_pixel_encoding pixel_encoding)
+{
+	unsigned int propval = 0;
+
+	switch (pixel_encoding) {
+	case PIXEL_ENCODING_RGB:
+		propval = DRM_COLOR_FORMAT_RGB444;
+		break;
+	case PIXEL_ENCODING_YCBCR444:
+		propval = DRM_COLOR_FORMAT_YCBCR444;
+		break;
+	case PIXEL_ENCODING_YCBCR420:
+		propval = DRM_COLOR_FORMAT_YCBCR420;
+		break;
+	default:
+		break;
+	}
+	return propval;
+}
+
+/*
+ * Tries to read 'pixel_encoding' from the pixel_encoding DRM property on
+ * 'state'. Returns true if a supported, acceptable, non-undefined value is
+ * found; false otherwise. Only modifies 'pixel_encoding' if returning true.
+ */
+bool get_connector_state_pixel_encoding(
+	enum dc_pixel_encoding *pixel_encoding,
+	const struct drm_connector_state *state,
+	const struct drm_display_info *info,
+	const struct drm_display_mode *mode_in)
+{
+	bool ret = false;
+	struct dm_connector_state *dm_state;
+
+	dm_state = to_dm_connector_state(state);
+	if (!dm_state)
+		return false;
+
+	/* check encoding is supported */
+	switch (dm_state->pixel_encoding) {
+	case PIXEL_ENCODING_RGB:
+		ret = (info->color_formats & DRM_COLOR_FORMAT_RGB444);
+		break;
+	case PIXEL_ENCODING_YCBCR444:
+		ret = (info->color_formats & DRM_COLOR_FORMAT_YCBCR444);
+		break;
+	case PIXEL_ENCODING_YCBCR420:
+		ret = drm_mode_is_420(info, mode_in);
+		break;
+	default:
+		break;
+	}
+
+	if (ret)
+		*pixel_encoding = dm_state->pixel_encoding;
+
+	return ret;
+}
+
+/*
+ * Writes 'pixel_encoding' to the pixel_encoding DRM property on 'state', if
+ * the enum value is valid and supported; otherwise writes
+ * PIXEL_ENCODING_UNDEFINED which corresponds to the "auto" property state.
+ */
+void set_connector_state_pixel_encoding(
+	const struct drm_connector_state *state,
+	enum dc_pixel_encoding pixel_encoding)
+{
+	struct dm_connector_state *dm_state;
+
+	dm_state = to_dm_connector_state(state);
+	if (!dm_state)
+		return;
+
+	dm_state->pixel_encoding = pixel_encoding;
+}
+
 static void fill_stream_properties_from_drm_display_mode(
 	struct dc_stream_state *stream,
 	const struct drm_display_mode *mode_in,
@@ -5271,18 +5380,22 @@ static void fill_stream_properties_from_drm_display_mode(
 	timing_out->h_border_right = 0;
 	timing_out->v_border_top = 0;
 	timing_out->v_border_bottom = 0;
-	/* TODO: un-hardcode */
-	if (drm_mode_is_420_only(info, mode_in)
+
+	if (!get_connector_state_pixel_encoding(&timing_out->pixel_encoding,
+		connector_state, info, mode_in)) {
+		/* auto-select a pixel encoding */
+		if (drm_mode_is_420_only(info, mode_in)
 			&& stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
-		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
-	else if (drm_mode_is_420_also(info, mode_in)
+			timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+		else if (drm_mode_is_420_also(info, mode_in)
 			&& aconnector->force_yuv420_output)
-		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
-	else if ((connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR444)
-			&& stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
-		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR444;
-	else
-		timing_out->pixel_encoding = PIXEL_ENCODING_RGB;
+			timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+		else if ((connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR444)
+				&& stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
+			timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR444;
+		else
+			timing_out->pixel_encoding = PIXEL_ENCODING_RGB;
+	}
 
 	timing_out->timing_3d_format = TIMING_3D_FORMAT_NONE;
 	timing_out->display_color_depth = convert_color_depth_from_display_info(
@@ -5347,6 +5460,9 @@ static void fill_stream_properties_from_drm_display_mode(
 	}
 
 	stream->output_color_space = get_output_color_space(timing_out);
+
+	/* write back final choice of pixel encoding */
+	set_connector_state_pixel_encoding(connector_state, timing_out->pixel_encoding);
 }
 
 static void fill_audio_info(struct audio_info *audio_info,
@@ -6011,6 +6127,9 @@ int amdgpu_dm_connector_atomic_set_property(struct drm_connector *connector,
 	} else if (property == adev->mode_info.abm_level_property) {
 		dm_new_state->abm_level = val;
 		ret = 0;
+	} else if (property == adev->mode_info.pixel_encoding_property) {
+		if (drm_prop_to_dc_pixel_encoding(&dm_new_state->pixel_encoding, val))
+			ret = 0;
 	}
 
 	return ret;
@@ -6055,6 +6174,9 @@ int amdgpu_dm_connector_atomic_get_property(struct drm_connector *connector,
 		ret = 0;
 	} else if (property == adev->mode_info.abm_level_property) {
 		*val = dm_state->abm_level;
+		ret = 0;
+	} else if (property == adev->mode_info.pixel_encoding_property) {
+		*val = dc_pixel_encoding_to_drm_prop(dm_state->pixel_encoding);
 		ret = 0;
 	}
 
@@ -6136,6 +6258,20 @@ void amdgpu_dm_connector_funcs_reset(struct drm_connector *connector)
 		if (connector->connector_type == DRM_MODE_CONNECTOR_eDP)
 			state->abm_level = amdgpu_dm_abm_level;
 
+		switch (connector->cmdline_mode.pixel_encoding) {
+		case DRM_COLOR_FORMAT_RGB444:
+			state->pixel_encoding = PIXEL_ENCODING_RGB;
+			break;
+		case DRM_COLOR_FORMAT_YCBCR444:
+			state->pixel_encoding = PIXEL_ENCODING_YCBCR444;
+			break;
+		case DRM_COLOR_FORMAT_YCBCR420:
+			state->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+			break;
+		default:
+			break;
+		}
+
 		__drm_atomic_helper_connector_reset(connector, &state->base);
 	}
 }
@@ -6162,6 +6298,7 @@ amdgpu_dm_connector_atomic_duplicate_state(struct drm_connector *connector)
 	new_state->underscan_vborder = state->underscan_vborder;
 	new_state->vcpi_slots = state->vcpi_slots;
 	new_state->pbn = state->pbn;
+	new_state->pixel_encoding = state->pixel_encoding;
 	return &new_state->base;
 }
 
@@ -7130,6 +7267,12 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 		if (adev->dm.hdcp_workqueue)
 			drm_connector_attach_content_protection_property(&aconnector->base, true);
 #endif
+
+		if (adev->mode_info.pixel_encoding_property) {
+			drm_object_attach_property(&aconnector->base.base,
+				adev->mode_info.pixel_encoding_property, 0);
+			DRM_DEBUG_DRIVER("amdgpu: attached pixel encoding drm property");
+		}
 	}
 }
 
@@ -8126,6 +8269,38 @@ static void amdgpu_dm_crtc_copy_transient_flags(struct drm_crtc_state *crtc_stat
 	stream_state->mode_changed = drm_atomic_crtc_needs_modeset(crtc_state);
 }
 
+static void update_stream_for_pixel_encoding(
+	struct dc_stream_update *stream_update,
+	struct drm_connector *connector,
+	struct dm_crtc_state *dm_old_crtc_state,
+	struct dm_crtc_state *dm_new_crtc_state,
+	struct dm_connector_state *dm_new_con_state)
+{
+	struct amdgpu_dm_connector *aconnector =
+		to_amdgpu_dm_connector(connector);
+	struct dc_stream_state *new_stream = NULL;
+
+	if (aconnector)
+		new_stream = create_validate_stream_for_sink(
+			aconnector,
+			&dm_new_crtc_state->base.mode,
+			dm_new_con_state,
+			dm_old_crtc_state->stream);
+	if (new_stream) {
+		dm_new_crtc_state->stream->timing =
+			new_stream->timing;
+		stream_update->timing_for_pixel_encoding =
+			&dm_new_crtc_state->stream->timing;
+
+		dm_new_crtc_state->stream->output_color_space =
+			new_stream->output_color_space;
+		stream_update->output_color_space =
+			&dm_new_crtc_state->stream->output_color_space;
+
+		dc_stream_release(new_stream);
+	}
+}
+
 /**
  * amdgpu_dm_atomic_commit_tail() - AMDgpu DM's commit tail implementation.
  * @state: The atomic state to commit
@@ -8347,7 +8522,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		struct dc_stream_update stream_update;
 		struct dc_info_packet hdr_packet;
 		struct dc_stream_status *status = NULL;
-		bool abm_changed, hdr_changed, scaling_changed;
+		bool abm_changed, hdr_changed, scaling_changed, pixenc_changed;
 
 		memset(&dummy_updates, 0, sizeof(dummy_updates));
 		memset(&stream_update, 0, sizeof(stream_update));
@@ -8373,7 +8548,10 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		hdr_changed =
 			!drm_connector_atomic_hdr_metadata_equal(old_con_state, new_con_state);
 
-		if (!scaling_changed && !abm_changed && !hdr_changed)
+		pixenc_changed = dm_new_con_state->pixel_encoding !=
+				 dm_old_con_state->pixel_encoding;
+
+		if (!scaling_changed && !abm_changed && !hdr_changed && !pixenc_changed)
 			continue;
 
 		stream_update.stream = dm_new_crtc_state->stream;
@@ -8394,6 +8572,13 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		if (hdr_changed) {
 			fill_hdr_info_packet(new_con_state, &hdr_packet);
 			stream_update.hdr_static_metadata = &hdr_packet;
+		}
+
+		if (pixenc_changed) {
+			update_stream_for_pixel_encoding(&stream_update,
+				connector,
+				dm_old_crtc_state, dm_new_crtc_state,
+				dm_new_con_state);
 		}
 
 		status = dc_stream_get_status(dm_new_crtc_state->stream);
@@ -9566,6 +9751,12 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 		if (dm_old_con_state->abm_level != dm_new_con_state->abm_level ||
 		    dm_old_con_state->scaling != dm_new_con_state->scaling)
 			new_crtc_state->connectors_changed = true;
+
+		if (dm_old_con_state->pixel_encoding !=
+		    dm_new_con_state->pixel_encoding) {
+			new_crtc_state->connectors_changed = true;
+			new_crtc_state->mode_changed = true;
+		}
 	}
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)

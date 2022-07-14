@@ -711,6 +711,7 @@ struct dm_connector_state {
 	uint8_t abm_level;
 	int vcpi_slots;
 	uint64_t pbn;
+	enum dc_pixel_encoding pixel_encoding;
 };
 
 /**
