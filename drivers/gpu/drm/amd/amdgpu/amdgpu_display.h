@@ -49,4 +49,7 @@ amdgpu_lookup_format_info(u32 format, uint64_t modifier);
 int amdgpu_display_suspend_helper(struct amdgpu_device *adev);
 int amdgpu_display_resume_helper(struct amdgpu_device *adev);
 
+bool amdgpu_user_pixenc_from_name(unsigned int *user_pixenc,
+				  const char *pixenc_name);
+
 #endif

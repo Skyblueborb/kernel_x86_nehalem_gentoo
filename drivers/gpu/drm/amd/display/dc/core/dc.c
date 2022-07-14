@@ -2682,6 +2682,11 @@ static enum surface_update_type check_update_surfaces_for_stream(
 		 */
 		if (!dc->debug.enable_legacy_fast_update && stream_update->out_transfer_func)
 			su_flags->bits.out_tf = 1;
+
+		if (stream_update->timing_for_pixel_encoding) {
+			su_flags->bits.pixel_encoding = 1;
+			elevate_update_type(&overall_type, UPDATE_TYPE_FULL);
+		}
 	}
 
 	for (i = 0 ; i < surface_count; i++) {
@@ -3003,6 +3008,10 @@ static void copy_stream_update_to_stream(struct dc *dc,
 			update->dsc_config = NULL;
 		}
 	}
+
+	if (update->timing_for_pixel_encoding) {
+		stream->timing = *update->timing_for_pixel_encoding;
+	}
 }
 
 static void backup_planes_and_stream_state(
@@ -3206,6 +3215,7 @@ static void commit_planes_do_stream_update(struct dc *dc,
 					stream_update->vsp_infopacket ||
 					stream_update->hfvsif_infopacket ||
 					stream_update->adaptive_sync_infopacket ||
+					stream_update->timing_for_pixel_encoding ||
 					stream_update->vtem_infopacket) {
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);

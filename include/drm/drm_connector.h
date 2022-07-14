@@ -1491,6 +1491,13 @@ struct drm_cmdline_mode {
 	 * Did the mode have a preferred TV mode?
 	 */
 	bool tv_mode_specified;
+
+    /**
+	 * @pixel_encoding:
+	 *
+	 * Initial pixel encoding.
+	 */
+	unsigned int pixel_encoding;
 };
 
 /**
