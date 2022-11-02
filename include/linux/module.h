@@ -879,8 +879,8 @@ static inline bool module_sig_ok(struct module *module)
 }
 #endif	/* CONFIG_MODULE_SIG */
 
-int module_kallsyms_on_each_symbol(int (*fn)(void *, const char *,
-					     struct module *, unsigned long),
+int module_kallsyms_on_each_symbol(const char *modname,
+				   int (*fn)(void *, const char *, unsigned long),
 				   void *data);
 
 #endif /* _LINUX_MODULE_H */
