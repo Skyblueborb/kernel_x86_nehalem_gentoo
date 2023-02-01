@@ -19,6 +19,9 @@
  *
  *  Adaptive scheduling granularity, math enhancements by Peter Zijlstra
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
+ *
+ *  Remove energy efficiency functions by Alexandre Frade
+ *  (C) 2021 Alexandre Frade <kernel@xanmod.org>
  */
 #include <linux/energy_model.h>
 #include <linux/mmap_lock.h>
@@ -7163,7 +7166,6 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	lockdep_assert_held(&p->pi_lock);
 	if (wake_flags & WF_TTWU) {
 		record_wakee(p);
-
 		want_affine = !wake_wide(p) && cpumask_test_cpu(cpu, p->cpus_ptr);
         }
 	}
