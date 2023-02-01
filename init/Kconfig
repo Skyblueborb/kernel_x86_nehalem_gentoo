@@ -1011,7 +1011,6 @@ config CGROUP_WRITEBACK
 
 menuconfig CGROUP_SCHED
 	bool "CPU controller"
-	depends on !TT_SCHED
 	default n
 	help
 	  This feature lets CPU scheduler recognize task groups and control CPU
@@ -1290,8 +1289,6 @@ config CHECKPOINT_RESTORE
 
 config SCHED_AUTOGROUP
 	bool "Automatic process group scheduling"
-	default n
-	depends on !TT_SCHED
 	select CGROUPS
 	select CGROUP_SCHED
 	select FAIR_GROUP_SCHED
