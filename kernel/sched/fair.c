@@ -7370,7 +7370,6 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 
 		want_affine = !wake_wide(p) && cpumask_test_cpu(cpu, p->cpus_ptr);
         }
-	}
 
 	rcu_read_lock();
 	for_each_domain(cpu, tmp) {
