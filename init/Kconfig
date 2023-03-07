@@ -1425,6 +1425,12 @@ choice
 	prompt "Compiler optimization level"
 	default CC_OPTIMIZE_FOR_PERFORMANCE
 
+config CC_OPTIMIZE_FOR_PERFORMANCE_O3
+	bool "Optimize for performance (-O3)"
+	help
+	  This is the most aggressive optimization level for the kernel, building
+	  with the "-O3" compiler flag for best performance.
+
 config CC_OPTIMIZE_FOR_PERFORMANCE
 	bool "Optimize for performance (-O2)"
 	help
