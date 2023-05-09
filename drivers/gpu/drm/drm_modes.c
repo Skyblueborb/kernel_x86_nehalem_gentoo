@@ -2258,6 +2258,7 @@ static int drm_mode_parse_cmdline_options(const char *str,
 				return -EINVAL;
 		} else if (!strncmp(option, "tv_mode", delim - option)) {
 			if (drm_mode_parse_tv_mode(delim, mode))
+                return -EINVAL;
 		} else if (!strncmp(option, "pixel_encoding", delim - option)) {
 			if (drm_mode_parse_pixel_encoding(delim, mode))
 				return -EINVAL;
